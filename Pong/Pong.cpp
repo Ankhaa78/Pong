@@ -2,6 +2,7 @@
 #include <SDL.h>
 #include <string>
 #include <iostream>
+#include <cmath>
 
 struct objectSDL
 {
@@ -20,7 +21,7 @@ public:
 	int getPosX();
 	int getPosY();
 
-	//Velocité
+	//VelocitÃ©
 	int getVelX();
 	int getVelY();
 	void setVelX(int vel);
@@ -107,7 +108,7 @@ int Balle::getDim()
 void Balle::updatePos(double deltaTime)
 {
 	object.dst.x = posX = posX + velX * deltaTime;
-	object.dst.y = posY =  posY + velY * deltaTime;
+	object.dst.y = posY = posY + velY * deltaTime;
 }
 
 void Balle::rebondirPaddle()
@@ -148,13 +149,14 @@ public:
 	int getPosX();
 	int getPosY();
 
-	//Velocité
+	//VelocitÃ©
 	int getVel();
 	void setVel(int vel);
 
 	//Mouvement
 	bool moveUp(double deltaTime);
 	bool moveDown(double deltaTime);
+	
 
 	//SDL Stuff
 	void chargerPaddle();
@@ -167,7 +169,7 @@ public:
 private:
 	int posX;
 	int posY;
-	int velDep; //Vitesse de déplacement en Y
+	int velDep; //Vitesse de dÃ©placement en Y
 	int w;     //Width (Largeur)
 	int h;     //Height (Hauteur)
 	char side; //L for left, R for right
@@ -287,7 +289,7 @@ Window::Window(int hauteur, int largeur, char nom[20])
 	strcpy_s(name, nom);
 }
 
-Window::~Window(){}
+Window::~Window() {}
 
 void Window::initWindow()
 {
@@ -308,7 +310,7 @@ void Window::destroy() {
 	SDL_DestroyWindow(window);
 }
 
-SDL_Surface Window::getScreenSurface(){	return *screenSurface; }
+SDL_Surface Window::getScreenSurface() { return *screenSurface; }
 
 int Window::getHeight() { return h; }
 
@@ -324,7 +326,11 @@ void manageEvent(SDL_Event, bool&, bool&);
 bool checkCollisionPlaf(Balle&, int);
 bool checkCollisionPaddle(Paddle &paddle, Balle &balle);
 bool checkBallOutofBounds(Balle&, Window&);
-void resetBall(Balle&, Window&);
+void resetBall(Balle& , Window&, Paddle&);
+
+
+void AI(Balle & ball, Paddle & pdl, Window & window, int dist, double deltaT);
+int predirePosition(Balle & ball, int dist, Window & gameWindow);
 
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -332,7 +338,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	//Initialize Video
 	if (SDL_Init(SDL_INIT_VIDEO) < 0)
 	{
-		std::cout << "Erreur d'initation de la vidéo..." << std::endl;
+		std::cout << "Erreur d'initation de la vidÃ©o..." << std::endl;
 		system("pause");
 		return 1;
 	}
@@ -344,7 +350,6 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 1;
 	}
 
-	
 
 
 
@@ -352,10 +357,11 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 
-	//Création des objets
+
+	//CrÃ©ation des objets
 	Paddle pdlJoueur = Paddle(96, 16, 50, 252, 2, 'l'), pdlAI = Paddle(96, 16, 734, 252, 2, 'r');
 	Window gameWindow = Window(600, 800, "Pong!");
-	Balle ball = Balle(16, 392, 292, 2,0);
+	Balle ball = Balle(16, 392, 292, 2, 2);
 
 	//Initialisation 
 	//TODO: Fonction
@@ -378,6 +384,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	bool quitter = false;
 	bool gameGoing = false;
 
+	int distPaddle = pdlAI.getPosX() - (pdlJoueur.getPosX() + 16);
+
 	while (!quitter) //Main loop
 	{
 		LAST = NOW;
@@ -386,7 +394,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		deltaTime /= 2; //plus bas ca le brise
 		gameWindow.clean();
 
-		// Lire événements
+		// Lire Ã©vÃ©nements
 		SDL_Event evenement;
 		while (SDL_PollEvent(&evenement) != 0)
 		{
@@ -403,44 +411,46 @@ int _tmain(int argc, _TCHAR* argv[])
 			pdlJoueur.moveUp(deltaTime);
 		}
 
-		//Right paddle
-		if (state[SDL_SCANCODE_DOWN]) { //Down
-			pdlAI.moveDown(deltaTime);
-		}
-		if (state[SDL_SCANCODE_UP]) { //UP
-			pdlAI.moveUp(deltaTime);
-		}
+		////Right paddle
+		//if (state[SDL_SCANCODE_DOWN]) { //Down
+		//	pdlAI.moveDown(deltaTime);
+		//}
+		//if (state[SDL_SCANCODE_UP]) { //UP
+		//	pdlAI.moveUp(deltaTime);
+		//}
 
 
 		if (gameGoing) //Update la position de la balle
 		{
 			checkCollisionPlaf(ball, gameWindow.getHeight());
-			
+
 			//Evite de faire des checks inutiles
-			if (ball.getPosX() > gameWindow.getWidth() / 2) //Côté droit
+			if (ball.getPosX() > gameWindow.getWidth() / 2) //CÃ´tÃ© droit
 				checkCollisionPaddle(pdlAI, ball);
 			else
-				checkCollisionPaddle(pdlJoueur, ball); //Côté gauche
+				checkCollisionPaddle(pdlJoueur, ball); //CÃ´tÃ© gauche
 
 			if (checkBallOutofBounds(ball, gameWindow)) {
 				gameGoing = false;
-				resetBall(ball, gameWindow);
+				resetBall(ball, gameWindow, pdlAI);
 			}
 			ball.updatePos(deltaTime);
 
-		}
-	
+			AI(ball, pdlAI, gameWindow, distPaddle, deltaTime);
 
-		
+		}
+
+
+
 		ball.blit(surface);
 		pdlAI.blit(surface);
 		pdlJoueur.blit(surface);
-		
+
 		//Update the surface 
 		gameWindow.update();
 	}
 
-	gameWindow.destroy();//TODO déconstructeur?
+	gameWindow.destroy();//TODO dÃ©constructeur?
 	system("pause");
 	SDL_Quit();
 	return 0;
@@ -461,7 +471,7 @@ void manageEvent(SDL_Event evenement, bool &quitter, bool &gameGoing)
 
 /*void manageKeyPress(Paddle pdlJoueur, Paddle pdlAI, double deltaTime)
 {
-	
+
 }*/
 
 
@@ -476,8 +486,8 @@ bool checkCollisionPlaf(Balle &ball, int h)
 }
 
 /*Check for collisions between a paddle and a ball
-  makes the ball bounce if there's one*/
-bool checkCollisionPaddle(Paddle &paddle,Balle &balle)
+makes the ball bounce if there's one*/
+bool checkCollisionPaddle(Paddle &paddle, Balle &balle)
 {
 	//DON'T FORGET: IF THE Y AND X IS OK (SO THERE'S A COLLISION) REPLACE THE BALL SO IT DOESNT FUCK UP
 	if (balle.getPosY() >= paddle.getPosY() && balle.getPosY() <= (paddle.getPosY() + paddle.getHeight())) //Check en Y
@@ -485,9 +495,9 @@ bool checkCollisionPaddle(Paddle &paddle,Balle &balle)
 		//Check en X
 		if (paddle.getSide() == 'r') //Right paddle
 		{
-			if (balle.getPosX() >= paddle.getPosX() && balle.getPosX() <= paddle.getPosX() + 16) //Deuxieme condition pour éviter les trucs fucked
+			if (balle.getPosX() >= paddle.getPosX() && balle.getPosX() <= paddle.getPosX() + 16) //Deuxieme condition pour Ã©viter les trucs fucked
 			{
-				balle.setPosX(paddle.getPosX()); //Replace la balle pour éviter de tout briser
+				balle.setPosX(paddle.getPosX()); //Replace la balle pour Ã©viter de tout briser
 				balle.rebondirPaddle();
 			}
 		}
@@ -495,7 +505,7 @@ bool checkCollisionPaddle(Paddle &paddle,Balle &balle)
 		{
 			if (balle.getPosX() <= paddle.getPosX() && balle.getPosX() >= paddle.getPosX() - 16)
 			{
-				balle.setPosX(paddle.getPosX()); //Replace la balle pour éviter de tout briser
+				balle.setPosX(paddle.getPosX()); //Replace la balle pour Ã©viter de tout briser
 				balle.rebondirPaddle();
 			}
 		}
@@ -509,11 +519,56 @@ bool checkBallOutofBounds(Balle &balle, Window &window)
 	return (balle.getPosX() < 0) || (balle.getPosX() > window.getWidth());
 }
 
-void resetBall(Balle &ball, Window &window) 
+void resetBall(Balle &ball, Window &window, Paddle &pdlAI)
 {
-	ball.setPosX(window.getWidth()  /2 - ball.getDim());
+	ball.setPosX(window.getWidth() / 2 - ball.getDim());
 	ball.setPosY(window.getHeight() / 2 - ball.getDim());
+	pdlAI.setPosY(252);
 }
 
+void AI(Balle &ball, Paddle &pdl, Window &window, int dist, double deltaT)
+{
+	int posBall;
 
+	//la balle va vers la droite et a dÃ©passÃ© le 1/3 de l'Ã©cran
+	if (ball.getPosX() > (window.getWidth() * 1 / 3) && ball.getVelX() > 0)
+	{
+		posBall = predirePosition(ball, dist, window);
 
+		if (ball.getPosX() + (pdl.getHeight() - ball.getDim()) / 2 > posBall - 8)
+			pdl.moveDown(deltaT);
+		else if (ball.getPosX() + (pdl.getHeight() - ball.getDim()) / 2 < posBall - 8)
+			pdl.moveUp(deltaT);
+	}
+	else if (ball.getVelX() < 0)
+	{
+		if (ball.getPosX() + pdl.getHeight()  / 2 > window.getHeight()/2)
+			pdl.moveDown(deltaT);
+		else if (ball.getPosX() + pdl.getHeight() / 2 < window.getHeight() / 2)
+			pdl.moveUp(deltaT);
+	}
+}
+
+int predirePosition(Balle &ball, int dist, Window &gameWindow)
+{
+	float pente;
+	int yPredit;
+	int nbRebond;
+
+	//trouver la pente
+	pente = ball.getVelY() / ball.getVelX();
+
+	//prÃ©dire la position de la balle sans tenir copte des rebonds
+	yPredit = abs(pente * -(dist + ball.getPosY()));
+
+	//Calcul du nombre de rebonds
+	nbRebond = yPredit / gameWindow.getHeight();
+
+	//prÃ©dire en tenant compte du nombre de rebond
+	if (nbRebond % 2 == 0)
+		yPredit = yPredit % gameWindow.getHeight();
+	else
+		yPredit = gameWindow.getHeight() - (yPredit % gameWindow.getHeight());
+
+	return yPredit;
+}
