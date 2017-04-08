@@ -140,7 +140,7 @@ void Balle::rebondirBot() {
 class Paddle
 {
 public:
-	Paddle(int height, int width, int pX, int pY, int);
+	Paddle(int height, int width, int pX, int pY, int, char);
 	~Paddle();
 	//Position
 	void setPosX(int pos);
@@ -160,6 +160,10 @@ public:
 	void chargerPaddle();
 	void blit(SDL_Surface *surface);
 
+	int getHeight();
+
+	char getSide();
+
 private:
 	int posX;
 	int posY;
@@ -170,13 +174,14 @@ private:
 	objectSDL object;
 };
 
-Paddle::Paddle(int height, int width, int pX, int pY, int vel)
+Paddle::Paddle(int height, int width, int pX, int pY, int vel, char cote)
 {
 	h = object.dst.h = height;
 	w = object.dst.w = width;
 	posX = object.dst.x = pX;
 	posY = object.dst.y = pY;
 	velDep = vel;
+	side = cote;
 }
 
 Paddle::~Paddle()
@@ -240,6 +245,10 @@ void Paddle::blit(SDL_Surface* surface) {
 	SDL_BlitSurface(object.surface, NULL, surface, &object.dst);
 }
 
+int Paddle::getHeight() { return h; }
+
+char Paddle::getSide() { return side; }
+
 
 
 
@@ -261,6 +270,8 @@ public:
 
 	int getHeight();
 
+	int getWidth();
+
 private:
 	int w;     //Width (Largeur)
 	int h;     //Height (Hauteur)
@@ -276,9 +287,7 @@ Window::Window(int hauteur, int largeur, char nom[20])
 	strcpy_s(name, nom);
 }
 
-Window::~Window()
-{
-}
+Window::~Window(){}
 
 void Window::initWindow()
 {
@@ -295,24 +304,27 @@ void Window::update() {
 	SDL_UpdateWindowSurface(window);
 }
 
-void Window::destroy() //TODO mettre dans le destructeur
-{
+void Window::destroy() {
 	SDL_DestroyWindow(window);
 }
 
-SDL_Surface Window::getScreenSurface()
-{
-	return *screenSurface;
-}
+SDL_Surface Window::getScreenSurface(){	return *screenSurface; }
 
-int Window::getHeight() {
-	return h;
-}
+int Window::getHeight() { return h; }
+
+int Window::getWidth() { return w; }
+
+
+
+int _tmain(int argc, _TCHAR * argv[]);
 
 //Proto
 void manageEvent(SDL_Event, bool&, bool&);
 //void manageKeyPress(Paddle, Paddle, double);
 bool checkCollisionPlaf(Balle&, int);
+bool checkCollisionPaddle(Paddle &paddle, Balle &balle);
+bool checkBallOutofBounds(Balle&, Window&);
+void resetBall(Balle&, Window&);
 
 
 int _tmain(int argc, _TCHAR* argv[])
@@ -332,6 +344,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 1;
 	}
 
+	
+
 
 
 
@@ -339,9 +353,9 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	//Création des objets
-	Paddle pdlJoueur = Paddle(96, 16, 50, 252, 2), pdlAI = Paddle(96, 16, 734, 252, 2);
+	Paddle pdlJoueur = Paddle(96, 16, 50, 252, 2, 'l'), pdlAI = Paddle(96, 16, 734, 252, 2, 'r');
 	Window gameWindow = Window(600, 800, "Pong!");
-	Balle ball = Balle(16, 392, 292, 2,2);
+	Balle ball = Balle(16, 392, 292, 2,0);
 
 	//Initialisation 
 	//TODO: Fonction
@@ -369,7 +383,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		LAST = NOW;
 		NOW = SDL_GetTicks();
 		deltaTime = NOW - LAST;
-		deltaTime *= 0.5;
+		deltaTime /= 2; //plus bas ca le brise
 		gameWindow.clean();
 
 		// Lire événements
@@ -378,7 +392,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		{
 			manageEvent(evenement, quitter, gameGoing);
 		}
-		//manageKeyPress(pdlJoueur, pdlAI, deltaTime);
+
 
 		//Managing keypress
 		//Left paddle
@@ -398,24 +412,37 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 
 
-		if (gameGoing)
+		if (gameGoing) //Update la position de la balle
 		{
 			checkCollisionPlaf(ball, gameWindow.getHeight());
+			
+			//Evite de faire des checks inutiles
+			if (ball.getPosX() > gameWindow.getWidth() / 2) //Côté droit
+				checkCollisionPaddle(pdlAI, ball);
+			else
+				checkCollisionPaddle(pdlJoueur, ball); //Côté gauche
+
+			if (checkBallOutofBounds(ball, gameWindow)) {
+				gameGoing = false;
+				resetBall(ball, gameWindow);
+			}
 			ball.updatePos(deltaTime);
+
 		}
 	
 
+		
 		ball.blit(surface);
 		pdlAI.blit(surface);
 		pdlJoueur.blit(surface);
-
-
+		
 		//Update the surface 
 		gameWindow.update();
 	}
 
-	gameWindow.destroy();//TODO déconstructeur
+	gameWindow.destroy();//TODO déconstructeur?
 	system("pause");
+	SDL_Quit();
 	return 0;
 }
 
@@ -437,14 +464,55 @@ void manageEvent(SDL_Event evenement, bool &quitter, bool &gameGoing)
 	
 }*/
 
+
+//Check for collision with top/bottom and makes the ball bounce
 bool checkCollisionPlaf(Balle &ball, int h)
 {
 	if (ball.getPosY() < 0)
 		ball.rebondirTop();
 	else if (ball.getPosY() > h - 16)
 		ball.rebondirBot();
-
 	return false;
+}
+
+/*Check for collisions between a paddle and a ball
+  makes the ball bounce if there's one*/
+bool checkCollisionPaddle(Paddle &paddle,Balle &balle)
+{
+	//DON'T FORGET: IF THE Y AND X IS OK (SO THERE'S A COLLISION) REPLACE THE BALL SO IT DOESNT FUCK UP
+	if (balle.getPosY() >= paddle.getPosY() && balle.getPosY() <= (paddle.getPosY() + paddle.getHeight())) //Check en Y
+	{
+		//Check en X
+		if (paddle.getSide() == 'r') //Right paddle
+		{
+			if (balle.getPosX() >= paddle.getPosX() && balle.getPosX() <= paddle.getPosX() + 16) //Deuxieme condition pour éviter les trucs fucked
+			{
+				balle.setPosX(paddle.getPosX()); //Replace la balle pour éviter de tout briser
+				balle.rebondirPaddle();
+			}
+		}
+		else
+		{
+			if (balle.getPosX() <= paddle.getPosX() && balle.getPosX() >= paddle.getPosX() - 16)
+			{
+				balle.setPosX(paddle.getPosX()); //Replace la balle pour éviter de tout briser
+				balle.rebondirPaddle();
+			}
+		}
+	}
+	return false;
+}
+
+//Return True if ball is out of screen, false if not
+bool checkBallOutofBounds(Balle &balle, Window &window)
+{
+	return (balle.getPosX() < 0) || (balle.getPosX() > window.getWidth());
+}
+
+void resetBall(Balle &ball, Window &window) 
+{
+	ball.setPosX(window.getWidth()  /2 - ball.getDim());
+	ball.setPosY(window.getHeight() / 2 - ball.getDim());
 }
 
 
